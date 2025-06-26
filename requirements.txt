@@ -1,0 +1,17 @@
+langchain
+langchain-core
+langchain-google-genai
+langgraph
+langsmith
+gradio
+fastapi
+uvicorn
+python-dotenv
+tenacity
+jsonpatch
+langchain-tavily
+pymongo
+motor
+langfuse
+
+aiohttp
