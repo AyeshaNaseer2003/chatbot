@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 
-# Ensure it's available
 if not MONGO_URI:
     raise ValueError("MONGO_URI not found in environment variables")
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
