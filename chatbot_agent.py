@@ -6,7 +6,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from dotenv import load_dotenv
 import os
-from langchain_core.messages import AIMessage, ToolMessage, BaseMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, BaseMessage
 
 load_dotenv()
 os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
@@ -32,17 +32,39 @@ graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
 graph = graph_builder.compile()
 
-def ask_gemini(message: str, history: List[List[str]]) -> str:
-    messages = [{"role": "system", "content": "You are a helpful assistant. Always use the Tavily search tool to answer questions needing current information, like dates or weather."}]
+
+def ask_gemini(message: str, history: list) -> str:
+    # Build initial system prompt
+    messages: list[BaseMessage] = [
+        SystemMessage(content="You are a helpful assistant. Always use the Tavily search tool to answer questions needing current information, like dates or weather.")
+    ]
+
+    # Add historical user-assistant pairs
     for pair in history:
         if isinstance(pair, (list, tuple)) and len(pair) == 2:
             user_msg, bot_msg = pair
-            messages.append({"role": "user", "content": user_msg})
-            messages.append({"role": "assistant", "content": bot_msg})
-    messages.append({"role": "user", "content": message})
+            messages.append(HumanMessage(content=user_msg))
+            messages.append(AIMessage(content=bot_msg))
+
+    # Add the latest user input
+    messages.append(HumanMessage(content=message))
 
     input_state = {"messages": messages}
     output = graph.invoke(input_state)
-    final_message = output["messages"][-1]
-    return getattr(final_message, "content", str(final_message))
 
+    # Extract the last message from LangGraph output
+    final_message = output["messages"][-1]
+
+
+    # Safe content extraction
+    if isinstance(final_message, AIMessage):
+        return final_message.content
+    elif hasattr(final_message, "content") and isinstance(final_message.content, str):
+        return final_message.content
+    else:
+        # Fallback: search backwards for last message with content
+        for msg in reversed(output["messages"]):
+            if hasattr(msg, "content") and isinstance(msg.content, str):
+                return msg.content
+
+    return "Sorry, I couldn't generate a response."

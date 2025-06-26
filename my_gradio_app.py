@@ -1,14 +1,29 @@
 # my_gradio_app.py
 import time
 import gradio as gr
+from concurrent.futures import ThreadPoolExecutor
 import asyncio
 from mongo_utils import save_message
 from chatbot_agent import ask_gemini  
 
 user = "ayesha"
 
+_executor = ThreadPoolExecutor()
+
 def sync_save(user_message, bot_reply):
-    asyncio.run(save_message(user, user_message, bot_reply))
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    if loop.is_running():
+        # Run in background thread-safe way
+        asyncio.run_coroutine_threadsafe(save_message(user, user_message, bot_reply), loop)
+    else:
+        loop.run_until_complete(save_message(user, user_message, bot_reply))
+
+
 
 def slow_stream(user_message, history):
 

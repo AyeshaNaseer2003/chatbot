@@ -1,25 +1,14 @@
-💼 My Internship Tasks:
+*Ayesha’s LangGraph + Tavily + Langfuse Chatbot*
 
-✅ Implement a React Agent using LangChain (ReAct framework)
+A Python chatbot built with LangGraph, Gemini (via LangChain), TavilySearch, fastapi, pydantic model for api request and reponse, Langfuse tracing, and a MongoDB-powered history database. Deployed as a streaming Gradio app with chat-thread continuity.
 
-✅ Use Gemini as the LLM
+🧱 Features
+ReAct-style reasoning: Automatically triggers TavilySearch for current info (dates, weather, news).
 
-✅ Store the system prompt on Langfuse for logging and traceability
+Streaming responses: Character-by-character effect using Gradio.
 
-✅ Save chat history in MongoDB using AgenticMongoDBSaver
+MongoDB history: Saves each user/assistant exchange and retrieves past chats.
 
-✅ Add tools:
+Langfuse observability: Traces prompts, tools used, and LLM generations.
 
-📂 RAG (Retrieval-Augmented Generation) using Netsol’s financial reports stored in MongoDB
-
-🌐 Tavily for web search-based queries
-
-✅ Build a backend with FastAPI using:
-
-Proper routers
-
-Chat interaction via registration ID
-
-✅ Create a simple Streamlit frontend to interact with the chatbot
-
-This project is helping me learn how real-world LLM agents work with tools and memory, and how to combine AI with backend and frontend systems.
+Prompt versioning: Supports dynamic meta‑prompts from Langfuse for flexible control.
