@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from chatbot_agent import ask_gemini
 from mongo_utils import save_message, get_history
 
@@ -13,23 +14,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/chat")
-async def chat_endpoint(request: Request):
-    data = await request.json()
-    user_id = data.get("user_id", "default_user")
-    message = data.get("message")
+# Pydantic Models
+class ChatRequest(BaseModel):
+    user_id: str = "ayesha"
+    message: str
 
-    messages = await get_history(user_id)
+class ChatResponse(BaseModel):
+    reply: str
+
+class HistoryResponse(BaseModel):
+    history: list
+
+
+# Routes
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    messages = await get_history(request.user_id)
     history = [[m["message"], m["response"]] for m in messages]
 
-    reply = ask_gemini(message, history)
+    reply = ask_gemini(request.message, history)
+    await save_message(request.user_id, request.message, reply)
 
-    await save_message(user_id, message, reply)
-
-    return {"reply": reply}
+    return ChatResponse(reply=reply)
 
 
-@app.get("/history/{user_id}")
+@app.get("/history/{user_id}", response_model=HistoryResponse)
 async def fetch_history(user_id: str):
     messages = await get_history(user_id)
-    return {"history": messages}
+    return HistoryResponse(history=messages)

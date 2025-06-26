@@ -10,21 +10,22 @@ def sync_save(user_message, bot_reply):
     asyncio.run(save_message(user, user_message, bot_reply))
 
 def slow_stream(user_message, history):
+    # Build history_pairs for context
     history_pairs = [
-        (m["content"], history[i+1]["content"])
+        (m["content"], history[i + 1]["content"])
         for i, m in enumerate(history[:-1])
         if m["role"] == "user"
     ]
 
     reply = ask_gemini(user_message, history_pairs)
-    history = history + [{"role": "user", "content": user_message}]
-
-    # Streaming tokens
-    for i in range(len(reply)):
-        current = reply[:i+1]
-        yield history + [{"role": "assistant", "content": current}], current
-
     sync_save(user_message, reply)
+
+    # Stream assistant response character by character
+    partial = ""
+    for ch in reply:
+        partial += ch
+        time.sleep(0.01)
+        yield partial  # yield just the assistant's message
 
 demo = gr.ChatInterface(
     slow_stream,
