@@ -1,4 +1,4 @@
-from typing import Annotated, TypedDict, List, Dict
+from typing import Annotated, TypedDict, List
 from langchain_tavily import TavilySearch
 from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, START
@@ -8,11 +8,15 @@ from langchain_core.messages import BaseMessage
 from dotenv import load_dotenv
 import os
 
-from langfuse import observe, get_client
+from langfuse import get_client,observe
 from langfuse.langchain import CallbackHandler
 
-client = get_client()
-langfuse_handler = CallbackHandler()
+lf = get_client()
+lf_handler = CallbackHandler()
+
+# ✔️ Fetch the production meta‑prompt
+prompt_obj = lf.get_prompt("my_gemini_meta", type="chat")  # defaults to production label
+SYSTEM_PROMPT_TEMPLATES = prompt_obj  # Prompt object, includes .prompt (list of messages) & .config
 
 load_dotenv()
 os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
@@ -38,28 +42,28 @@ graph_builder.add_conditional_edges("chatbot", tools_condition)
 graph_builder.add_edge("tools", "chatbot")
 graph = graph_builder.compile()
 
-SYSTEM_PROMPT = (
-    "You are a helpful assistant. "
-    "You have a web searching tool Tavily(use it for current, today's and recent events)"
-    "If you need current information (dates, weather, etc.), respond in ReAct format:\n"
-    "Thought: Do I need a tool? Yes\n"
-    "Action: TavilySearch\n"
-    "Action Input: <your_question>\n"
-    "Then wait for the tool's response before replying."
-)
 @observe(as_type="generation", name="ask_gemini")
 def ask_gemini(message: str, history: List[List[str]]) -> str:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for u, b in history:
-        messages += [{"role": "user", "content": u}, {"role": "assistant", "content": b}]
-    messages.append({"role": "user", "content": message})
+    # ✅ Compile prompt with current user_input
+    system_messages = SYSTEM_PROMPT_TEMPLATES.compile(user_input=message)
+    messages = system_messages.copy()  # list of role/content dicts
 
-    with client.start_as_current_span(name="ask_gemini_graph"):
+    # Append conversation history
+    for u, b in history:
+        messages.append({"role": "user", "content": u})
+        messages.append({"role": "assistant", "content": b})
+
+    # Optionally, not needed since compile appended user input
+    # messages.append({"role":"user", "content":message})
+
+    with lf.start_as_current_span(name="ask_gemini_graph"):
         output = graph.invoke(
             input={"messages": messages},
-            config={"callbacks": [langfuse_handler]}
-            # metadata={"langfuse_user_id": "ayesha"}
+            config={
+              "callbacks": [lf_handler],
+              "langfuse_prompt": SYSTEM_PROMPT_TEMPLATES  # link prompt to trace
+            },
+            metadata={"langfuse_user_id": "ayesha"}
         )
 
     return output["messages"][-1].content
-

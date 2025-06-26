@@ -3,7 +3,7 @@ import time
 import gradio as gr
 import asyncio
 from mongo_utils import save_message
-from chatbot_agent import ask_gemini  # your LLM function
+from chatbot_agent import ask_gemini  
 
 user = "ayesha"
 
