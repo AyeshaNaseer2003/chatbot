@@ -1,4 +1,4 @@
-from typing import Annotated, TypedDict, List, Dict
+from typing import Annotated, TypedDict, List
 from langchain_tavily import TavilySearch
 from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, START
@@ -8,9 +8,21 @@ from dotenv import load_dotenv
 import os
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, BaseMessage
 
+# Langfuse imports
+from langfuse import get_client, observe
+from langfuse.langchain import CallbackHandler
+
+# Load env and API keys
 load_dotenv()
 os.environ["GOOGLE_API_KEY"] = os.getenv("GEMINI_API_KEY")
 os.environ["TAVILY_API_KEY"] = os.getenv("TAVILY_API_KEY")
+
+# Setup Langfuse keys before initialization
+os.environ.setdefault("LANGFUSE_PUBLIC_KEY", os.getenv("LANGFUSE_PUBLIC_KEY"))
+os.environ.setdefault("LANGFUSE_SECRET_KEY", os.getenv("LANGFUSE_SECRET_KEY"))
+os.environ.setdefault("LANGFUSE_HOST", os.getenv("LANGFUSE_HOST"))
+lf = get_client()
+langfuse_handler = CallbackHandler()
 
 class State(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -32,39 +44,41 @@ graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
 graph = graph_builder.compile()
 
-
+@observe()
 def ask_gemini(message: str, history: list) -> str:
-    # Build initial system prompt
+    # 1. Build system prompt
     messages: list[BaseMessage] = [
         SystemMessage(content="You are a helpful assistant. Always use the Tavily search tool to answer questions needing current information, like dates or weather.")
     ]
-
-    # Add historical user-assistant pairs
+    # 2. Inject history
     for pair in history:
         if isinstance(pair, (list, tuple)) and len(pair) == 2:
-            user_msg, bot_msg = pair
-            messages.append(HumanMessage(content=user_msg))
-            messages.append(AIMessage(content=bot_msg))
-
-    # Add the latest user input
+            messages.append(HumanMessage(content=pair[0]))
+            messages.append(AIMessage(content=pair[1]))
+    # 3. Add current message
     messages.append(HumanMessage(content=message))
 
-    input_state = {"messages": messages}
-    output = graph.invoke(input_state)
+    # 4. Invoke Graph with Langfuse tracing callback
+    output = graph.invoke(
+        {"messages": messages},
+        config={
+            "callbacks": [langfuse_handler],
+            "metadata": {
+                "langfuse_user_id": os.getenv("USER", "unknown"),
+                "langfuse_session_id": os.getenv("USER", "session"),
+                "langfuse_tags": ["chatbot"]
+            }
+        }
+    )
 
-    # Extract the last message from LangGraph output
-    final_message = output["messages"][-1]
-
-
-    # Safe content extraction
-    if isinstance(final_message, AIMessage):
-        return final_message.content
-    elif hasattr(final_message, "content") and isinstance(final_message.content, str):
-        return final_message.content
+    # 5. Extract assistant reply safely
+    final = output["messages"][-1]
+    if isinstance(final, AIMessage):
+        return final.content
+    elif hasattr(final, "content"):
+        return str(final.content)
     else:
-        # Fallback: search backwards for last message with content
         for msg in reversed(output["messages"]):
-            if hasattr(msg, "content") and isinstance(msg.content, str):
-                return msg.content
-
-    return "Sorry, I couldn't generate a response."
+            if hasattr(msg, "content"):
+                return str(msg.content)
+    return "Sorry, I couldn’t generate a response."
